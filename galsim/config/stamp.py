@@ -348,42 +348,43 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
             if builder.updateSkip(prof, im, method, offset, stamp, config, logger):
                 raise SkipThisObject('')
 
-            # Draw the object on the postage stamp
-            im = builder.draw(prof, im, method, offset, stamp, config, logger)
+            # Draw the object on the postage stamp: not needed for photonarray
+            #im = builder.draw(prof, im, method, offset, stamp, config, logger)
+            phot = builder.draw(prof, im, method, offset, stamp, config, logger)
             # Store the final version of the current profile for reference.
             config['current_prof'] = prof
 
-            # Update the drawn image according to the SNR if desired.
-            scale_factor = builder.getSNRScale(im, stamp, config, logger)
-            im, prof = builder.applySNRScale(im, prof, scale_factor, method, logger)
+            # Update the drawn image according to the SNR if desired: not currently used for photonarray
+            #scale_factor = builder.getSNRScale(im, stamp, config, logger)
+            #im, prof = builder.applySNRScale(im, prof, scale_factor, method, logger)
 
-            # Set the origin appropriately
-            builder.updateOrigin(stamp, config, im)
+            # TODO: Set the origin appropriately for photons? or this can be done else where
+            #builder.updateOrigin(stamp, config, im)
 
             # Store the current stamp in the base-level config for reference
-            config['current_stamp'] = im
+            config['current_stamp'] = phot
             # This is also information that the weight image calculation needs
             config['do_noise_in_stamps'] = do_noise
 
-            # Check if this object should be rejected.
-            reject = builder.reject(stamp, config, prof, psf, im, logger)
-            if reject:
-                if itry < ntries:
-                    logger.warning('Object %d: Rejecting this object and rebuilding', obj_num)
-                    builder.reset(config, logger)
-                    continue
-                else:
-                    raise GalSimConfigError(
-                            "Rejected an object %d times. If this is expected, "
-                            "you should specify a larger stamp.retry_failures."%(ntries))
+            # TODO: we may want some form of this for the photon array. Check if this object should be rejected.
+            # reject = builder.reject(stamp, config, prof, psf, im, logger)
+            # if reject:
+            #     if itry < ntries:
+            #         logger.warning('Object %d: Rejecting this object and rebuilding', obj_num)
+            #         builder.reset(config, logger)
+            #         continue
+            #     else:
+            #         raise GalSimConfigError(
+            #                 "Rejected an object %d times. If this is expected, "
+            #                 "you should specify a larger stamp.retry_failures."%(ntries))
 
             ProcessExtraOutputsForStamp(config, False, logger)
 
-            # We always need to do the whiten step here in the stamp processing
-            current_var = builder.whiten(prof, im, stamp, config, logger)
-            if current_var != 0.:
-                logger.debug('obj %d: whitening noise brought current var to %f',
-                                config.get('obj_num',0),current_var)
+            # TODO: when do we do this step for photon array? We always need to do the whiten step here in the stamp processing
+            # current_var = builder.whiten(prof, im, stamp, config, logger)
+            # if current_var != 0.:
+            #     logger.debug('obj %d: whitening noise brought current var to %f',
+            #                     config.get('obj_num',0),current_var)
 
             # Sometimes, depending on the image type, we go on to do the rest of the noise as well.
             if do_noise:
@@ -395,9 +396,9 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
             logger.info('Skipping object %d %s', obj_num, e.msg)
             # If xsize, ysize != 0, then this makes a blank stamp for this object.
             # Otherwise, it's just None here.
-            im = builder.makeStamp(stamp, config, xsize, ysize, logger)
+            phot = builder.makeStamp(stamp, config, xsize, ysize, logger)
             ProcessExtraOutputsForStamp(config, True, logger)
-            return im, 0.
+            return phot, 0.
 
         except Exception as e:
             if skip_failures:
@@ -406,9 +407,9 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
                 logger.debug('obj %d: Traceback = %s',obj_num,tr)
                 logger.info('Skipping this object')
                 # Now same as SkipThisObject case above.
-                im = builder.makeStamp(stamp, config, xsize, ysize, logger)
+                phot = builder.makeStamp(stamp, config, xsize, ysize, logger)
                 ProcessExtraOutputsForStamp(config, True, logger)
-                return im, 0.
+                return phot, 0.
             elif itry >= ntries:
                 # Then this was the last try.  Just re-raise the exception.
                 logger.info('Object %d: Caught exception %s',obj_num,str(e))
@@ -429,7 +430,7 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
 
         else:
             # No exception.
-            return im, current_var
+            return phot, current_var
 
 
 def MakeStampTasks(config, jobs, logger):
