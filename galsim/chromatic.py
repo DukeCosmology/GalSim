@@ -2497,7 +2497,7 @@ class ChromaticSum(ChromaticObject):
             if this_n == 0:
                 continue
             temp = PhotonArray(this_n)
-            temp._copyFrom(photons, slice(None), use, do_xy=False, do_flux=False)
+            temp._copyFrom(photons, slice(None), use, do_xy=True, do_flux=False)
             obj._shoot(temp, rng)
             photons._copyFrom(temp, use, slice(None))
 

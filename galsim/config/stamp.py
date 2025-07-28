@@ -41,6 +41,7 @@ from ..convolve import Convolve, Convolution
 from ..box import Pixel
 from ..chromatic import ChromaticObject
 from ..bandpass import Bandpass
+from ..photon_array import PhotonArray
 
 # This file handles the building of postage stamps to place onto a larger image.
 # There is only one type of stamp currently, called Basic, which builds a galaxy from
@@ -115,7 +116,7 @@ def BuildStamps(nobjects, config, obj_num=0,
         if result[0] is not None:
             # Note: numpy shape is y,x
             image = result[0]
-            ys, xs = image.array.shape
+            ys, xs = 1,1#image.array.shape
             if proc is None: s0 = ''
             else: s0 = '%s: '%proc
             obj_num = jobs[k]['obj_num']
@@ -142,7 +143,6 @@ def BuildStamps(nobjects, config, obj_num=0,
     logger.debug('image %d: Done making stamps',config.get('image_num',0))
     if all(im is None for im in images):
         logger.warning('No stamps were built.  All objects were skipped.')
-
     return images, current_vars
 
 # A list of keys that really belong in stamp, but are allowed in image both for convenience
@@ -261,7 +261,7 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
 
     logger = LoggerWrapper(logger)
     SetupConfigObjNum(config, obj_num, logger)
-
+    
     stamp = config['stamp']
     stamp_type = stamp['type']
     if stamp_type not in valid_stamp_types:
@@ -351,9 +351,11 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
             # Draw the object on the postage stamp: not needed for photonarray
             #im = builder.draw(prof, im, method, offset, stamp, config, logger)
             phot = builder.draw(prof, im, method, offset, stamp, config, logger)
+            # phot.x += image_pos.x
+            # phot.y += image_pos.y
             # Store the final version of the current profile for reference.
             config['current_prof'] = prof
-
+            
             # Update the drawn image according to the SNR if desired: not currently used for photonarray
             #scale_factor = builder.getSNRScale(im, stamp, config, logger)
             #im, prof = builder.applySNRScale(im, prof, scale_factor, method, logger)
@@ -362,10 +364,10 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
             #builder.updateOrigin(stamp, config, im)
 
             # Store the current stamp in the base-level config for reference
-            config['current_stamp'] = phot
+            config['current_stamp'] = im
             # This is also information that the weight image calculation needs
             config['do_noise_in_stamps'] = do_noise
-
+            
             # TODO: we may want some form of this for the photon array. Check if this object should be rejected.
             # reject = builder.reject(stamp, config, prof, psf, im, logger)
             # if reject:
@@ -385,7 +387,7 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
             # if current_var != 0.:
             #     logger.debug('obj %d: whitening noise brought current var to %f',
             #                     config.get('obj_num',0),current_var)
-
+            current_var = 0
             # Sometimes, depending on the image type, we go on to do the rest of the noise as well.
             if do_noise:
                 im, current_var = builder.addNoise(stamp,config,im,current_var,logger)
@@ -396,9 +398,9 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
             logger.info('Skipping object %d %s', obj_num, e.msg)
             # If xsize, ysize != 0, then this makes a blank stamp for this object.
             # Otherwise, it's just None here.
-            phot = builder.makeStamp(stamp, config, xsize, ysize, logger)
+            builder.makeStamp(stamp, config, xsize, ysize, logger)
             ProcessExtraOutputsForStamp(config, True, logger)
-            return phot, 0.
+            return PhotonArray(0), 0.
 
         except Exception as e:
             if skip_failures:
@@ -407,9 +409,9 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
                 logger.debug('obj %d: Traceback = %s',obj_num,tr)
                 logger.info('Skipping this object')
                 # Now same as SkipThisObject case above.
-                phot = builder.makeStamp(stamp, config, xsize, ysize, logger)
+                builder.makeStamp(stamp, config, xsize, ysize, logger)
                 ProcessExtraOutputsForStamp(config, True, logger)
-                return phot, 0.
+                return PhotonArray(0), 0.
             elif itry >= ntries:
                 # Then this was the last try.  Just re-raise the exception.
                 logger.info('Object %d: Caught exception %s',obj_num,str(e))
@@ -419,15 +421,16 @@ def BuildStamp(config, obj_num=0, xsize=0, ysize=0, do_noise=True, logger=None):
                         obj_num)
                 raise
             else:
-                logger.info('Object %d: Caught exception %s',obj_num,str(e))
-                logger.info('This is try %d/%d, so trying again.',itry,ntries)
-                tr = traceback.format_exc()
-                logger.debug('obj %d: Traceback = %s',obj_num,tr)
-                # Need to remove the "current"s from the config dict.  Otherwise,
-                # the value generators will do a quick return with the cached value.
-                builder.reset(config, logger)
-                continue
-
+                return phot, current_var
+            #     logger.info('Object %d: Caught exception %s',obj_num,str(e))
+            #     logger.info('This is try %d/%d, so trying again.',itry,ntries)
+            #     tr = traceback.format_exc()
+            #     logger.debug('obj %d: Traceback = %s',obj_num,tr)
+            #     # Need to remove the "current"s from the config dict.  Otherwise,
+            #     # the value generators will do a quick return with the cached value.
+            #     builder.reset(config, logger)
+            #     continue
+        
         else:
             # No exception.
             return phot, current_var
@@ -728,7 +731,7 @@ class StampBuilder:
     def locateStamp(self, config, base, xsize, ysize, image_pos, world_pos, logger):
         """Determine where and how large the stamp should be.
 
-        The base class version does the followin:
+        The base class version does the following:
 
         - If given, set base['stamp_xsize'] = xsize
         - If given, set base['stamp_ysize'] = ysize
